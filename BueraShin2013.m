@@ -8,11 +8,16 @@
 Params.beta=0.904;
 % But this results in too much assets such that the eqm interest rate goes
 % negative, so I instead just set
-Params.beta=0.80; % (I tried 0.85, but still ended up with interest rate of around -0.02)
+Params.beta=0.7; % (I tried 0.85, but still ended up with interest rate of around -0.02, beta=0.8 got interest rate of essentially 0)
 % (BS2013 say beta=0.904 was calibrated to target r=0.045; their table 1)
 % (I would guess that it is either because they set to max for assets too
 % low, or that there is heavy approximation in the value fn at high levels
 % of asset; if the original codes were available you would be able to tell)
+
+CreateFigures=0
+
+% A line I needed for running on the Server
+addpath(genpath('./MatlabToolkits/'))
 
 
 %% Setting
@@ -127,6 +132,7 @@ FnsToEvaluate.A=@(aprime,a,z,tau,psi) a; % assets
 FnsToEvaluate.K=@(aprime,a,z,tau,psi,w,r,lambda,delta,alpha,upsilon) BueraShin2013_capitaldemand(aprime,a,z,tau,psi,w,r,lambda,delta,alpha,upsilon); % Capital used (zero if worker)
 FnsToEvaluate.L=@(aprime,a,z,tau,psi,w,r,lambda,delta,alpha,upsilon) BueraShin2013_labordemand(aprime,a,z,tau,psi,w,r,lambda,delta,alpha,upsilon); % Labor demand (zero if worker)
 FnsToEvaluate.entrepreneur=@(aprime,a,z,tau,psi,w,r,lambda,delta,alpha,upsilon) BueraShin2013_entrepreneur(aprime,a,z,tau,psi,w,r,lambda,delta,alpha,upsilon);% 1 if entrepreneur, 0 if worker
+% FnsToEvaluate.z=@(aprime,a,z,tau,psi) z; % entrepreneurial ability
 
 %% Model is set, we can start by just that the basics are running okay
 vfoptions=struct();
@@ -139,10 +145,12 @@ StationaryDist=StationaryDist_Case1(Policy,n_d,n_a,n_ztaupsi,pi_ztaupsi,simoptio
 AggVars=EvalFnOnAgentDist_AggVars_Case1(StationaryDist, Policy, FnsToEvaluate, Params, [], n_d, n_a, n_ztaupsi, d_grid, a_grid, ztaupsi_grid, [], simoptions);
 toc
 
-% take a look at cdf over asset grid to make sure not hitting top of grid
-figure(1)
-subplot(3,1,1); plot(a_grid,cumsum(sum(sum(sum(StationaryDist,4),3),2)))
-title('cdf of asset to make sure grid on assets seems okay (pre test)')
+if CreateFigures==1
+    % take a look at cdf over asset grid to make sure not hitting top of grid
+    figure(1)
+    subplot(3,1,1); plot(a_grid,cumsum(sum(sum(sum(StationaryDist,4),3),2)))
+    title('cdf of asset to make sure grid on assets seems okay (pre test)')
+end
 % before we do the general eqm, just take a look at some things to get a
 % feel for what going to happen with general eqm conditions
 [AggVars.A.Mean,AggVars.K.Mean]
@@ -152,7 +160,7 @@ title('cdf of asset to make sure grid on assets seems okay (pre test)')
 %% Set up general equilibrium
 GEPriceParamNames={'r','w'};
 
-GeneralEqmEqns.capitalmarket=@(K,A) K-A; % capital demand equals assets
+GeneralEqmEqns.capitalmarket=@(K,A) A-K; % assets minus capital demand
 GeneralEqmEqns.labormarket=@(L,entrepreneur) L-(1-entrepreneur); % labor demand=labor supply, suppy is just fraction of workers (who each exogneously supply endowment 1 of labor)
 
 %% Now compute the initial stationary general eqm
@@ -165,20 +173,22 @@ toc
 % Compute some things relating to initial stationary general eqm
 Params.r=p_eqm_init.r;
 Params.w=p_eqm_init.w;
-[V,Policy]=ValueFnIter_Case1(n_d,n_a,n_ztaupsi,d_grid,a_grid,ztaupsi_grid,pi_ztaupsi,ReturnFn,Params,DiscountFactorParamNames,[],vfoptions);
-StationaryDist=StationaryDist_Case1(Policy,n_d,n_z,n_ztaupsi,pi_ztaupsi,simoptions);
-AggVars=EvalFnOnAgentDist_AggVars_Case1(StationaryDist, Policy, FnsToEvaluate, Params, [], n_d, n_a, n_ztaupsi, d_grid, a_grid, ztaupsi_grid, [], simoptions);
-ValuesOnGrid=EvalFnOnAgentDist_ValuesOnGrid_Case1(Policy, FnsToEvaluate, Params, [], n_d, n_a, n_ztaupsi, d_grid, a_grid, ztaupsi_grid, [], simoptions);
+[V_init,Policy_init]=ValueFnIter_Case1(n_d,n_a,n_ztaupsi,d_grid,a_grid,ztaupsi_grid,pi_ztaupsi,ReturnFn,Params,DiscountFactorParamNames,[],vfoptions);
+StationaryDist_init=StationaryDist_Case1(Policy_init,n_d,n_a,n_ztaupsi,pi_ztaupsi,simoptions);
+AggVars_init=EvalFnOnAgentDist_AggVars_Case1(StationaryDist_init, Policy_init, FnsToEvaluate, Params, [], n_d, n_a, n_ztaupsi, d_grid, a_grid, ztaupsi_grid, [], simoptions);
+ValuesOnGrid=EvalFnOnAgentDist_ValuesOnGrid_Case1(Policy_init, FnsToEvaluate, Params, [], n_d, n_a, n_ztaupsi, d_grid, a_grid, ztaupsi_grid, [], simoptions);
 
 % We will need dist for the transition path
-StationaryDist_init=StationaryDist;
 % I want to keep the worker/entrepreneur decision for a graph
 workerORentrepreneur_init=ValuesOnGrid.entrepreneur;
+clear ValuesOnGrid
 
-% take another a look at cdf over asset grid to make sure not hitting top of grid
-figure(1)
-subplot(3,1,2); plot(a_grid,cumsum(sum(sum(sum(StationaryDist_init,4),3),2)))
-title('cdf of asset to make sure grid on assets seems okay (init eqm)')
+if CreateFigures==1
+    % take another a look at cdf over asset grid to make sure not hitting top of grid
+    figure(1)
+    subplot(3,1,2); plot(a_grid,cumsum(sum(sum(sum(StationaryDist_init,4),3),2)))
+    title('cdf of asset to make sure grid on assets seems okay (init eqm)')
+end
 
 
 %% And the final stationary general eqm
@@ -190,6 +200,14 @@ title('cdf of asset to make sure grid on assets seems okay (init eqm)')
 tau_grid=[0;0];
 ztaupsi_grid=[z_grid; tau_grid; psi_grid];
 
+% % Switch to using shooting algorithm
+% heteroagentoptions.fminalgo=5;
+% % Need to explain to heteroagentoptions how to use the GeneralEqmEqns to update the general eqm prices.
+% heteroagentoptions.fminalgo5.howtoupdate={...  % a row is: GEcondn, price, add, factor
+%     'capitalmarket','r',0,0.03;...  % capitalmarket GE condition will be positive if r is too big, so subtract
+%     'labormarket','w',1,0.1;... % labormarket GE condition will be positive if w is too small, so add
+%     };
+
 disp('Solving final stationary general eqm')
 tic;
 [p_eqm_final,~,GenEqmConds_final]=HeteroAgentStationaryEqm_Case1(n_d, n_a, n_ztaupsi, 0, pi_ztaupsi, d_grid, a_grid, ztaupsi_grid, ReturnFn, FnsToEvaluate, GeneralEqmEqns, Params, DiscountFactorParamNames, [], [], [], GEPriceParamNames,heteroagentoptions, simoptions, vfoptions);
@@ -198,28 +216,67 @@ toc
 % Compute some things relating to initial stationary general eqm
 Params.r=p_eqm_final.r;
 Params.w=p_eqm_final.w;
-[V,Policy]=ValueFnIter_Case1(n_d,n_a,n_ztaupsi,d_grid,a_grid,ztaupsi_grid,pi_ztaupsi,ReturnFn,Params,DiscountFactorParamNames,[],vfoptions);
-StationaryDist=StationaryDist_Case1(Policy,n_d,n_a,n_ztaupsi,pi_ztaupsi,simoptions);
-AggVars=EvalFnOnAgentDist_AggVars_Case1(StationaryDist, Policy, FnsToEvaluate, Params, [], n_d, n_a, n_ztaupsi, d_grid, a_grid, ztaupsi_grid, [], simoptions);
-ValuesOnGrid=EvalFnOnAgentDist_ValuesOnGrid_Case1(Policy, FnsToEvaluate, Params, [], n_d, n_a, n_ztaupsi, d_grid, a_grid, ztaupsi_grid, [], simoptions);
+[V_final,Policy_final]=ValueFnIter_Case1(n_d,n_a,n_ztaupsi,d_grid,a_grid,ztaupsi_grid,pi_ztaupsi,ReturnFn,Params,DiscountFactorParamNames,[],vfoptions);
+StationaryDist_final=StationaryDist_Case1(Policy_final,n_d,n_a,n_ztaupsi,pi_ztaupsi,simoptions);
+AggVars_final=EvalFnOnAgentDist_AggVars_Case1(StationaryDist_final, Policy_final, FnsToEvaluate, Params, [], n_d, n_a, n_ztaupsi, d_grid, a_grid, ztaupsi_grid, [], simoptions);
+ValuesOnGrid=EvalFnOnAgentDist_ValuesOnGrid_Case1(Policy_final, FnsToEvaluate, Params, [], n_d, n_a, n_ztaupsi, d_grid, a_grid, ztaupsi_grid, [], simoptions);
 
-% We will need dist for the transition path
-V_final=V;
+% We will need V_final for the transition path
 % I want to keep the worker/entrepreneur decision for a graph
 workerORentrepreneur_final=ValuesOnGrid.entrepreneur;
+clear ValuesOnGrid
 
-% take another a look at cdf over asset grid to make sure not hitting top of grid
-figure(1)
-subplot(3,1,3); plot(a_grid,cumsum(sum(sum(sum(StationaryDist,4),3),2)))
-title('cdf of asset to make sure grid on assets seems okay (final eqm)')
+if CreateFigures==1
+    % take another a look at cdf over asset grid to make sure not hitting top of grid
+    figure(1)
+    subplot(3,1,3); plot(a_grid,cumsum(sum(sum(sum(StationaryDist_final,4),3),2)))
+    title('cdf of asset to make sure grid on assets seems okay (final eqm)')
+end
+
+%% This is just me making sure I understand what r and w do to the general eqm conditions
+% % Turns out when r goes negative things get messy
+% Params.w=0.93;
+% for currr=-0.03:0.01:0.03
+%     Params.r=currr;
+%     [V,Policy]=ValueFnIter_Case1(n_d,n_a,n_ztaupsi,d_grid,a_grid,ztaupsi_grid,pi_ztaupsi,ReturnFn,Params,DiscountFactorParamNames,[],vfoptions);
+%     StationaryDist=StationaryDist_Case1(Policy,n_d,n_a,n_ztaupsi,pi_ztaupsi,simoptions);
+%     AggVars=EvalFnOnAgentDist_AggVars_Case1(StationaryDist, Policy, FnsToEvaluate, Params, [], n_d, n_a, n_ztaupsi, d_grid, a_grid, ztaupsi_grid, [], simoptions);
+%     Params.r
+%     [AggVars.A.Mean,AggVars.K.Mean]
+%     [AggVars.L.Mean,1-AggVars.entrepreneur.Mean]
+% end
+% % r=[-0.03, -0.02, -0.01, 0, 0.01, 0.02, 0.03]
+% % A=[0.9610, 0.9458, 0.9355, 0.9293, 0.9328, 0.9416, 0.9529] % so increasing r increase A, but only for positive r
+% % K=[1.2691, 1.2304, 1.1655, 1.0907, 0.9399, 0.9194, 0.0905] % so increasing r decreases K, monotonically
+% % When r increases, A increases (as long as r is positive) and K decreases, so A-K will increase
+% % [when r inceases, L decreases, 1-entrepreneur increases]
+% 
+% Params.r=0.02;
+% for currw=0.9:0.01:0.96
+%     Params.w=currw;
+%     [V,Policy]=ValueFnIter_Case1(n_d,n_a,n_ztaupsi,d_grid,a_grid,ztaupsi_grid,pi_ztaupsi,ReturnFn,Params,DiscountFactorParamNames,[],vfoptions);
+%     StationaryDist=StationaryDist_Case1(Policy,n_d,n_a,n_ztaupsi,pi_ztaupsi,simoptions);
+%     AggVars=EvalFnOnAgentDist_AggVars_Case1(StationaryDist, Policy, FnsToEvaluate, Params, [], n_d, n_a, n_ztaupsi, d_grid, a_grid, ztaupsi_grid, [], simoptions);
+%     Params.w
+%     [AggVars.A.Mean,AggVars.K.Mean]
+%     [AggVars.L.Mean,1-AggVars.entrepreneur.Mean]
+% end
+% %     w=[0.90, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96]
+% %     L=[0.9703, 0.9069, 0.8792, 0.8526, 0.8273, 0.8032, 0.7793] % so increasing w decreases L
+% % 1-ent=[0.9443, 0.9541, 0.9547, 0.9553, 0.9558, 0.9563, 0.9568] % so increasing w, increases 1-entrepreneur
+% % When w increase, L decreases, 1-ent increases, so L-(1-ent) will decrease
+
+
 
 %% Before we do the transition path, just a few things that help understand what is going on
 
 % First, a plot of the probability of being taxed (vs subsidised)---the
 % 'distortionary wedge'--- as a function of the entrepreneurial abilities
-figure(2)
-plot(z_grid,pi_taugivenz(1,:),'x')
-title('Probability of tax (vs subsidy) as function of z grid (entrepreneurial ability)')
+if CreateFigures==1
+    figure(2)
+    plot(z_grid,pi_taugivenz(1,:),'x')
+    title('Probability of tax (vs subsidy) as function of z grid (entrepreneurial ability)')
+end
 % Shows that high ability entrepreneurs are basically guaranteed to be taxed
 
 % Second, plots before and post-reform (initial and final stationary general eqms)
@@ -227,25 +284,27 @@ title('Probability of tax (vs subsidy) as function of z grid (entrepreneurial ab
 % Note: You will need to make this figure full screen to be able to read it
 % If we plot all the asset grid the ylabels is a mess because of the lines (between each square), so just plot every 10th asset grid point
 % (better would plot all and then modify the y-axis so that doesn't ytick them all, but I can't be bothered)
-just10thasset=1:10:n_a;
-figure(3)
-temp1=gather(workerORentrepreneur_init(just10thasset,:,1,1)); % heatmap only works with cpu
-subplot(3,1,1); heatmap(z_grid,a_grid(just10thasset),temp1)
-grid off
-title('Initial eqm, with tax: Who becomes entrepreneur')
-temp1=gather(workerORentrepreneur_init(just10thasset,:,2,1)); % heatmap only works with cpu
-subplot(3,1,2); heatmap(z_grid,a_grid(just10thasset),temp1)
-grid off
-title('Initial eqm, without tax: Who becomes entrepreneur')
-temp1=gather(workerORentrepreneur_final(just10thasset,:,1,1));% heatmap only works with cpu
-subplot(3,1,3); heatmap(z_grid,a_grid(just10thasset),temp1)
-grid off
-title('Final eqm: Who becomes entrepreneur')
+if CreateFigures==1
+    just10thasset=1:10:n_a;
+    figure(3)
+    temp1=gather(workerORentrepreneur_init(just10thasset,:,1,1)); % heatmap only works with cpu
+    subplot(3,1,1); heatmap(z_grid,a_grid(just10thasset),temp1)
+    grid off
+    title('Initial eqm, with tax: Who becomes entrepreneur')
+    temp1=gather(workerORentrepreneur_init(just10thasset,:,2,1)); % heatmap only works with cpu
+    subplot(3,1,2); heatmap(z_grid,a_grid(just10thasset),temp1)
+    grid off
+    title('Initial eqm, without tax: Who becomes entrepreneur')
+    temp1=gather(workerORentrepreneur_final(just10thasset,:,1,1));% heatmap only works with cpu
+    subplot(3,1,3); heatmap(z_grid,a_grid(just10thasset),temp1)
+    grid off
+    title('Final eqm: Who becomes entrepreneur')
+end
 % Can see that for initial eqm with tax, only very high entrepreneurial ability become entrepreneurs, and only those with some assets
 % Whereas with subsidy, all entrepreneurial abilities become entrepreneurs, as long as they have some assets
 % In final eqm, is more like the top two-thirds of entrepreneurial ability, but with a more important interaction with assets
 
-save BS2013_preTpath.mat
+save ./SavedOutput/BS2013_preTpath.mat
 
 
 %% And now the transition path
@@ -273,7 +332,7 @@ transpathoptions.GEnewprice=3;
 % Need to explain to transpathoptions how to use the GeneralEqmEqns to
 % update the general eqm transition prices (in PricePath).
 transpathoptions.GEnewprice3.howtoupdate={... % a row is: GEcondn, price, add, factor
-    'capitalmarket','r',0,0.1;...  % capitalmarket GE condition will be positive if r is too big, so subtract
+    'capitalmarket','r',0,0.03;...  % capitalmarket GE condition will be positive if r is too big, so subtract
     'labormarket','w',1,0.1;... % labormarket GE condition will be positivie if w is too small, so add
     };
 
@@ -286,12 +345,39 @@ transpathoptions.GEnewprice3.howtoupdate={... % a row is: GEcondn, price, add, f
 % Now just run the TransitionPath_Case1 command (all of the other inputs are things we 
 % had already had to define to be able to solve for the initial and final equilibria)
 transpathoptions.verbose=1;
+if CreateFigures==1
+    transpathoptions.graphpricepath=1;
+    transpathoptions.graphaggvarspath=1;
+end
+
 disp('Solving transition path')
 tic;
 PricePath=TransitionPath_Case1(PricePath0, ParamPath, T, V_final, StationaryDist_init, n_d, n_a, n_ztaupsi, pi_ztaupsi, d_grid,a_grid,ztaupsi_grid, ReturnFn, FnsToEvaluate, TransPathGeneralEqmEqns, Params, DiscountFactorParamNames, transpathoptions);
 toc
 
-save BS2013.mat
+save ./SavedOutput/BS2013.mat
+
+% Calculate some things about the transition
+[VPath,PolicyPath]=ValueFnOnTransPath_Case1(PricePath, ParamPath, T, V_final, Policy_final, Params, n_d, n_a, n_ztaupsi, pi_ztaupsi, d_grid, a_grid,ztaupsi_grid, DiscountFactorParamNames, ReturnFn, transpathoptions, vfoptions, simoptions);
+AgentDistPath=AgentDistOnTransPath_Case1(StationaryDist_init, PolicyPath,n_d,n_a,n_ztaupsi,pi_ztaupsi,T,simoptions);
+
+% Figure 3 shows GDP, TFP and Investment rate
+% Figure 4 shows Capital Stock and Interest Rates
+% Figure 5 shows Average Entrepreneurial Ability and Wealth Share of Top 5% Ability
+
+% Create some additional FnsToEvaluate so we can get all of these
+FnsToEvaluate.abilityofentrepreneur=@(aprime,a,z,tau,psi,w,r,lambda,delta,alpha,upsilon) z*BueraShin2013_entrepreneur(aprime,a,z,tau,psi,w,r,lambda,delta,alpha,upsilon);% 1 if entrepreneur, 0 if worker
+% Note: To get the average we will need to renormalize by fraction that are entrepreneurs
+
+
+AggVarsPath=EvalFnOnTransPath_AggVars_Case1(FnsToEvaluate,AgentDistPath,PolicyPath,PricePath,ParamPath, Params, T, n_d, n_a, n_ztaupsi, pi_ztaupsi, d_grid, a_grid,ztaupsi_grid,simoptions);
+
+
+
+
+
+
+
 
 
 

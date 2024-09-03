@@ -1,3 +1,7 @@
+clear
+clc
+close all
+addpath(genpath('C:\Users\aledi\Documents\GitHub\VFIToolkit-matlab'))
 % Buera & Shin (2013) - Financial Frictions and the Persistence of History: A Quantitative Exploration
 % The model of Buera & Shin (2013) requires some reworking before
 % computing, see the accompanying pdf.
@@ -14,15 +18,15 @@ Params.beta=0.7; % (I tried 0.85, but still ended up with interest rate of aroun
 % low, or that there is heavy approximation in the value fn at high levels
 % of asset; if the original codes were available you would be able to tell)
 
-CreateFigures=0
+CreateFigures=1
 
 % A line I needed for running on the Server
-addpath(genpath('./MatlabToolkits/'))
+%addpath(genpath('./MatlabToolkits/'))
 
 
 %% Setting
 n_d=0;
-n_a=1501; % assets
+n_a=1500; % assets
 n_ztaupsi=[40,2,2]; % entrepreneurial ability, tax/subsidy distortions, psi (draw new shock or not)
 % Note: grid sizes for z, tau and psi are all hardcoded (you cannot change them unless you
 % edit the section below that creates the grids and transition probabilities)
@@ -136,6 +140,9 @@ FnsToEvaluate.entrepreneur=@(aprime,a,z,tau,psi,w,r,lambda,delta,alpha,upsilon) 
 
 %% Model is set, we can start by just that the basics are running okay
 vfoptions=struct();
+vfoptions.verbose=1;
+vfoptions.lowmemory=0;
+vfoptions.parallel=0;
 simoptions=struct();
 
 disp('Test a few things before we start')
@@ -165,6 +172,7 @@ GeneralEqmEqns.labormarket=@(L,entrepreneur) L-(1-entrepreneur); % labor demand=
 
 %% Now compute the initial stationary general eqm
 heteroagentoptions.verbose=1;
+vfoptions.verbose=0;
 disp('Solving initial stationary general eqm')
 tic;
 [p_eqm_init,~,GenEqmConds_init]=HeteroAgentStationaryEqm_Case1(n_d, n_a, n_ztaupsi, 0, pi_ztaupsi, d_grid, a_grid, ztaupsi_grid, ReturnFn, FnsToEvaluate, GeneralEqmEqns, Params, DiscountFactorParamNames, [], [], [], GEPriceParamNames,heteroagentoptions, simoptions, vfoptions);

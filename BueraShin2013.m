@@ -12,13 +12,13 @@ addpath(genpath('C:\Users\aledi\Documents\GitHub\VFIToolkit-matlab'))
 %Params.beta=0.904;
 % But this results in too much assets such that the eqm interest rate goes
 % negative, so I instead just set
-Params.beta=0.7; % (I tried 0.85, but still ended up with interest rate of around -0.02, beta=0.8 got interest rate of essentially 0)
+%Params.beta=0.7; % (I tried 0.85, but still ended up with interest rate of around -0.02, beta=0.8 got interest rate of essentially 0)
 % (BS2013 say beta=0.904 was calibrated to target r=0.045; their table 1)
 % (I would guess that it is either because they set to max for assets too
 % low, or that there is heavy approximation in the value fn at high levels
 % of asset; if the original codes were available you would be able to tell)
 
-CreateFigures=1;
+CreateFigures=0;
 
 %% Setting
 n_d = 0;
@@ -29,7 +29,7 @@ n_z = 40; % entrepreneurial ability
 
 % Preferences
 Params.crra = 1.5;   % CRRA utility param
-%Params.beta = 0.904; % Discount factor
+Params.beta = 0.904; % Discount factor
 
 % Production fn
 Params.delta   =0.06; % Capital depreciation rate
@@ -41,22 +41,23 @@ Params.psi     =0.894; %stochastic process: persistence
 Params.eta     =4.15;  %stochastic process: dispersion
 
 % Collateral constraint
-Params.lambda  =1.35;
+Params.lambda  =inf;%1.35;
 
 % Initial values for general eqm parameters
 % Params.r=0.04;
 % Params.w=1;
 % I later overwrote these with something closer to what the initial eqm is (just to reduce runtime to find initial eqm)
-Params.r = 0.0668;
-Params.w = 0.83;
+Params.r = 0.0472;
+Params.w = 0.171;
 
 %% Grid for assets
 d_grid=[];
 % grid on assets
-a_min  = 0;
-a_max  = 50;
+n_a    = 1001;
+a_min  = 1e-6;
+a_max  = 4000;
 % a_scale>1 puts more points near zero
-a_scale = 3;
+a_scale = 2;
 a_grid  = a_min+(a_max-a_min)*linspace(0,1,n_a)'.^a_scale;
 
 %% Stochastic process
@@ -77,20 +78,22 @@ a_grid  = a_min+(a_max-a_min)*linspace(0,1,n_a)'.^a_scale;
 % We want pareto dist cdf as 1-x^(-eta)
 % So we want Pareto dist with scale parameter=1, and shape paremeter=eta
 % So we want k=1/eta (to hit shape param), sigma=1/eta (to hit scale param), theta=sigma/k=1
-zprobs=[linspace(0.633,0.998,n_z-2),0.999,0.9995]'; % M(e_j)
-z_grid = gpinv(zprobs,1/Params.eta,1/Params.eta,1); % inverse cdf of generalized pareto distribution
-% Finally,
-pi_z_vec=zeros(n_z,1);
-pi_z_vec(1)=zprobs(1)/zprobs(n_z);
-for jj=2:n_z
-    pi_z_vec(jj)=(zprobs(jj)-zprobs(jj-1))/zprobs(n_z);
-end
-% sum(pi_z_vec) % double-check, yes this formula does give total probability of one :)
-if abs(1-sum(pi_z_vec))>1e-8
-    disp(sum(pi_z_vec))
-    error('pi_z_vec does NOT sum to one!')
-end
+% zprobs=[linspace(0.633,0.998,n_z-2),0.999,0.9995]'; % M(e_j)
+% z_grid = gpinv(zprobs,1/Params.eta,1/Params.eta,1); % inverse cdf of generalized pareto distribution
+% % Finally,
+% pi_z_vec=zeros(n_z,1);
+% pi_z_vec(1)=zprobs(1)/zprobs(n_z);
+% for jj=2:n_z
+%     pi_z_vec(jj)=(zprobs(jj)-zprobs(jj-1))/zprobs(n_z);
+% end
+% % sum(pi_z_vec) % double-check, yes this formula does give total probability of one :)
+% if abs(1-sum(pi_z_vec))>1e-8
+%     disp(sum(pi_z_vec))
+%     error('pi_z_vec does NOT sum to one!')
+% end
 
+z_grid   = importdata('support.dat');
+pi_z_vec = importdata('dist.dat');
 % See my notes on Buera and Shin paper
 pi_z = Params.psi*eye(n_z)+(1-Params.psi)*ones(n_z,1)*pi_z_vec';
 pi_z = pi_z./sum(pi_z,2);
@@ -120,43 +123,43 @@ vfoptions.verbose   = 1;
 vfoptions.lowmemory = 0;
 simoptions          = struct();
 
-disp('Test a few things before we start')
-tic;
-[V,Policy]=ValueFnIter_Case1(n_d,n_a,n_z,d_grid,a_grid,z_grid,pi_z,ReturnFn,Params,DiscountFactorParamNames,[],vfoptions);
-StationaryDist=StationaryDist_Case1(Policy,n_d,n_a,n_z,pi_z,simoptions);
-AggVars=EvalFnOnAgentDist_AggVars_Case1(StationaryDist, Policy, FnsToEvaluate, Params, [], n_d, n_a, n_z, d_grid, a_grid, z_grid, [], simoptions);
-toc
-
-ValuesOnGrid=EvalFnOnAgentDist_ValuesOnGrid_Case1(Policy,FnsToEvaluate,...
-    Params,[],n_d,n_a,n_z,d_grid,a_grid,z_grid,[],simoptions);
-
-% 1=entre, 0 = worker
-workerORentrepreneur = gather(ValuesOnGrid.entrepreneur);
-clear ValuesOnGrid
-
-if CreateFigures==1
-    % take a look at cdf over asset grid to make sure not hitting top of grid
-    figure
-    plot(a_grid,cumsum(sum(StationaryDist,2)))
-    title('cdf of asset to make sure grid on assets seems okay (pre test)')
-    
-    % Occupational choice 1
-    just10thasset=1:10:n_a;
-    figure
-    temp1 = workerORentrepreneur(just10thasset,:); 
-    heatmap(z_grid,a_grid(just10thasset),temp1)
-    grid off
-    title('Who becomes entrepreneur')
-    xlabel('Ability')
-    ylabel('Assets')
-
-end
-
-% Before we do the general eqm, just take a look at some things to get a
-% feel for what going to happen with general eqm conditions
-disp('Look at GE conditions: capital, labor')
-disp([AggVars.A.Mean,AggVars.K.Mean])
-disp([AggVars.L.Mean,1-AggVars.entrepreneur.Mean])
+% disp('Test a few things before we start')
+% tic;
+% [V,Policy]=ValueFnIter_Case1(n_d,n_a,n_z,d_grid,a_grid,z_grid,pi_z,ReturnFn,Params,DiscountFactorParamNames,[],vfoptions);
+% StationaryDist=StationaryDist_Case1(Policy,n_d,n_a,n_z,pi_z,simoptions);
+% AggVars=EvalFnOnAgentDist_AggVars_Case1(StationaryDist, Policy, FnsToEvaluate, Params, [], n_d, n_a, n_z, d_grid, a_grid, z_grid, [], simoptions);
+% toc
+% 
+% ValuesOnGrid=EvalFnOnAgentDist_ValuesOnGrid_Case1(Policy,FnsToEvaluate,...
+%     Params,[],n_d,n_a,n_z,d_grid,a_grid,z_grid,[],simoptions);
+% 
+% % 1=entre, 0 = worker
+% workerORentrepreneur = gather(ValuesOnGrid.entrepreneur);
+% clear ValuesOnGrid
+% 
+% if CreateFigures==1
+%     % take a look at cdf over asset grid to make sure not hitting top of grid
+%     figure
+%     plot(a_grid,cumsum(sum(StationaryDist,2)))
+%     title('cdf of asset to make sure grid on assets seems okay (pre test)')
+% 
+%     % Occupational choice 1
+%     just10thasset=1:10:n_a;
+%     figure
+%     temp1 = workerORentrepreneur(just10thasset,:); 
+%     heatmap(z_grid,a_grid(just10thasset),temp1)
+%     grid off
+%     title('Who becomes entrepreneur')
+%     xlabel('Ability')
+%     ylabel('Assets')
+% 
+% end
+% 
+% % Before we do the general eqm, just take a look at some things to get a
+% % feel for what going to happen with general eqm conditions
+% disp('Look at GE conditions: capital, labor')
+% disp([AggVars.A.Mean,AggVars.K.Mean])
+% disp([AggVars.L.Mean,1-AggVars.entrepreneur.Mean])
 
 %% Set up general equilibrium
 GEPriceParamNames={'r','w'};
@@ -166,10 +169,18 @@ GeneralEqmEqns.labormarket=@(L,entrepreneur) L-(1-entrepreneur); % labor demand=
 
 %% Now compute the initial stationary general eqm
 heteroagentoptions.verbose=1;
-vfoptions.verbose=0; % No VFI display when doing GE
-disp('Solving initial stationary general eqm')
+heteroagentoptions.toleranceGEprices=10^(-3);
+heteroagentoptions.toleranceGEcondns=10^(-3);
+vfoptions.verbose=1; 
+do_GE = 0;
 
-[Outputs,Policy_init,StationaryDist_init,AggVars_init,ValuesOnGrid] = BueraShin_Fn(Params,n_d,n_a,n_z,pi_z,d_grid,a_grid,z_grid,ReturnFn,FnsToEvaluate,GeneralEqmEqns,DiscountFactorParamNames,GEPriceParamNames,heteroagentoptions,simoptions,vfoptions);
+if do_GE==1
+    disp('Solving initial stationary general eqm')
+else
+    disp('Solving initial partial eqm')
+end
+
+[Outputs,GE_cond,Policy_init,StationaryDist_init,AggVars_init,ValuesOnGrid] = BueraShin_Fn(do_GE,Params,n_d,n_a,n_z,pi_z,d_grid,a_grid,z_grid,ReturnFn,FnsToEvaluate,GeneralEqmEqns,DiscountFactorParamNames,GEPriceParamNames,heteroagentoptions,simoptions,vfoptions);
 
 %% Initial stationary general eqm
 Params.r=Outputs.r;
@@ -214,13 +225,14 @@ end
 % Can see that for initial eqm with tax, only very high entrepreneurial ability become entrepreneurs, and only those with some assets
 
 %% Save results to mat file
-save ./SavedOutput/BS2013_preTpath.mat
+save BS2013_preTpath.mat
 
 %% Replicate Figure 2 of BS2013
 
-%ii_bench    = 3;
-lambda_vec = [1.0,1.25,1.35,1.5,1.75,2.0];
+%ii_bench    = 1;
+lambda_vec = [inf,2.0,1.75,1.5,1.25,1.0]';
 NN = length(lambda_vec);
+do_GE = 1;
 
 %Pre-allocate arrays or structures where you want to store the output
 share_entre_vec = zeros(NN,1);
@@ -243,15 +255,15 @@ for ii=1:length(lambda_vec)
     disp('***************************************************************')
 
     if ii==1
-        Params.r = 0.047;
-        Params.w = 0.15;
+        Params.r = 0.0472;
+        Params.w = 0.171;
     elseif ii>1
         Params.r = r_vec(ii-1) ;
         Params.w = w_vec(ii-1);
     end
 
     tic
-    [Outputs] = BueraShin_Fn(Params,n_d,n_a,n_z,pi_z,d_grid,a_grid,z_grid,ReturnFn,FnsToEvaluate,GeneralEqmEqns,DiscountFactorParamNames,GEPriceParamNames,heteroagentoptions,simoptions,vfoptions);
+    [Outputs] = BueraShin_Fn(do_GE,Params,n_d,n_a,n_z,pi_z,d_grid,a_grid,z_grid,ReturnFn,FnsToEvaluate,GeneralEqmEqns,DiscountFactorParamNames,GEPriceParamNames,heteroagentoptions,simoptions,vfoptions);
     toc
 
     %Aggregate quantities and prices
@@ -267,7 +279,7 @@ for ii=1:length(lambda_vec)
 end
 
 %Add "_norm" to denote change wrt benchmark
-ii_bench    = 3;
+ii_bench    = 1;
 Y_vec_norm  = zeros(NN,1);
 
 for ii=1:NN
@@ -275,12 +287,36 @@ for ii=1:NN
 end
 
 %% Plots for Figure 2 of the paper
+
+ldw = 2;
+fts = 14;
+
 figure(1)
-plot(extfin_Y_vec,Y_vec_norm,'linewidth',2)
-xlabel('External Finance to GDP')
-title('GDP and TFP')
+plot(extfin_Y_vec,Y_vec_norm,'linewidth',ldw)
+xlabel('External Finance to GDP','FontSize',fts)
+ylabel('GDP relative to benchmark','FontSize',fts)
+title('GDP and TFP','FontSize',fts)
+print('fig2a_BS2013','-dpng')
 
 figure(2)
-plot(extfin_Y_vec,r_vec,'linewidth',2)
-xlabel('External Finance to GDP')
-title('Interest Rate')
+plot(extfin_Y_vec,r_vec,'linewidth',ldw)
+xlabel('External Finance to GDP','FontSize',fts)
+ylabel('Interest rate','FontSize',fts)
+title('Interest Rate','FontSize',fts)
+print('fig2b_BS2013','-dpng')
+
+figure(3)
+subplot(1,2,1)
+    plot(extfin_Y_vec,Y_vec_norm,'linewidth',ldw)
+    xlabel('External Finance to GDP','FontSize',fts)
+    ylabel('GDP relative to benchmark','FontSize',fts)
+    title('GDP and TFP','FontSize',fts)
+subplot(1,2,2)
+    plot(extfin_Y_vec,r_vec,'linewidth',ldw)
+    xlabel('External Finance to GDP','FontSize',fts)
+    ylabel('Interest rate','FontSize',fts)
+    title('Interest Rate','FontSize',fts)
+print('fig2_BS2013','-dpng')
+
+
+save data_all 

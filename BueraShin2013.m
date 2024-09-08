@@ -18,12 +18,10 @@ addpath(genpath('C:\Users\aledi\Documents\GitHub\VFIToolkit-matlab'))
 % low, or that there is heavy approximation in the value fn at high levels
 % of asset; if the original codes were available you would be able to tell)
 
-CreateFigures=0;
-
-%% Setting
-n_d = 0;
-n_a = 1000; % assets
-n_z = 40; % entrepreneurial ability
+%% Flags
+CreateFigures  = 1; % Flag 0/1 plot figures of initial steady-state
+do_GE          = 0; % 0 = partial equilibrium, 1 = general equilibrium
+do_replication = 0; % Flag 0/1 to replicate Figure 2 of BS 2013
 
 %% Parameters
 
@@ -43,15 +41,13 @@ Params.eta     =4.15;  %stochastic process: dispersion
 % Collateral constraint
 Params.lambda  =inf;%1.35;
 
-% Initial values for general eqm parameters
-% Params.r=0.04;
-% Params.w=1;
-% I later overwrote these with something closer to what the initial eqm is (just to reduce runtime to find initial eqm)
+% Initial values for general eqm parameters: good for lambda=inf
 Params.r = 0.0472;
 Params.w = 0.171;
 
 %% Grid for assets
 d_grid=[];
+n_d   =0;
 % grid on assets
 n_a    = 1001;
 a_min  = 1e-6;
@@ -94,6 +90,7 @@ a_grid  = a_min+(a_max-a_min)*linspace(0,1,n_a)'.^a_scale;
 
 z_grid   = importdata('support.dat');
 pi_z_vec = importdata('dist.dat');
+n_z      = length(z_grid);
 % See my notes on Buera and Shin paper
 pi_z = Params.psi*eye(n_z)+(1-Params.psi)*ones(n_z,1)*pi_z_vec';
 pi_z = pi_z./sum(pi_z,2);
@@ -123,56 +120,17 @@ vfoptions.verbose   = 1;
 vfoptions.lowmemory = 0;
 simoptions          = struct();
 
-% disp('Test a few things before we start')
-% tic;
-% [V,Policy]=ValueFnIter_Case1(n_d,n_a,n_z,d_grid,a_grid,z_grid,pi_z,ReturnFn,Params,DiscountFactorParamNames,[],vfoptions);
-% StationaryDist=StationaryDist_Case1(Policy,n_d,n_a,n_z,pi_z,simoptions);
-% AggVars=EvalFnOnAgentDist_AggVars_Case1(StationaryDist, Policy, FnsToEvaluate, Params, [], n_d, n_a, n_z, d_grid, a_grid, z_grid, [], simoptions);
-% toc
-% 
-% ValuesOnGrid=EvalFnOnAgentDist_ValuesOnGrid_Case1(Policy,FnsToEvaluate,...
-%     Params,[],n_d,n_a,n_z,d_grid,a_grid,z_grid,[],simoptions);
-% 
-% % 1=entre, 0 = worker
-% workerORentrepreneur = gather(ValuesOnGrid.entrepreneur);
-% clear ValuesOnGrid
-% 
-% if CreateFigures==1
-%     % take a look at cdf over asset grid to make sure not hitting top of grid
-%     figure
-%     plot(a_grid,cumsum(sum(StationaryDist,2)))
-%     title('cdf of asset to make sure grid on assets seems okay (pre test)')
-% 
-%     % Occupational choice 1
-%     just10thasset=1:10:n_a;
-%     figure
-%     temp1 = workerORentrepreneur(just10thasset,:); 
-%     heatmap(z_grid,a_grid(just10thasset),temp1)
-%     grid off
-%     title('Who becomes entrepreneur')
-%     xlabel('Ability')
-%     ylabel('Assets')
-% 
-% end
-% 
-% % Before we do the general eqm, just take a look at some things to get a
-% % feel for what going to happen with general eqm conditions
-% disp('Look at GE conditions: capital, labor')
-% disp([AggVars.A.Mean,AggVars.K.Mean])
-% disp([AggVars.L.Mean,1-AggVars.entrepreneur.Mean])
-
 %% Set up general equilibrium
 GEPriceParamNames={'r','w'};
+
+heteroagentoptions.verbose=1;
+heteroagentoptions.toleranceGEprices=10^(-3);
+heteroagentoptions.toleranceGEcondns=10^(-3);
 
 GeneralEqmEqns.capitalmarket=@(K,A) A-K; % assets minus capital demand
 GeneralEqmEqns.labormarket=@(L,entrepreneur) L-(1-entrepreneur); % labor demand=labor supply, suppy is just fraction of workers (who each exogneously supply endowment 1 of labor)
 
-%% Now compute the initial stationary general eqm
-heteroagentoptions.verbose=1;
-heteroagentoptions.toleranceGEprices=10^(-3);
-heteroagentoptions.toleranceGEcondns=10^(-3);
-vfoptions.verbose=1; 
-do_GE = 0;
+%% Compute the model once, either in partial or general equilibrium
 
 if do_GE==1
     disp('Solving initial stationary general eqm')
@@ -182,20 +140,25 @@ end
 
 [Outputs,GE_cond,Policy_init,StationaryDist_init,AggVars_init,ValuesOnGrid] = BueraShin_Fn(do_GE,Params,n_d,n_a,n_z,pi_z,d_grid,a_grid,z_grid,ReturnFn,FnsToEvaluate,GeneralEqmEqns,DiscountFactorParamNames,GEPriceParamNames,heteroagentoptions,simoptions,vfoptions);
 
-%% Initial stationary general eqm
+%% Analyse results from model solution and make plots
 Params.r=Outputs.r;
 Params.w=Outputs.w;
-% We will need dist for the transition path
-% I want to keep the worker/entrepreneur decision for a graph
-% 1=entre, 0=worker
+
 workerORentrepreneur_init=ValuesOnGrid.entrepreneur;
 clear ValuesOnGrid
 
 if CreateFigures==1
     % take another a look at cdf over asset grid to make sure not hitting top of grid
-    figure(1)
-    subplot(3,1,2); plot(a_grid,cumsum(sum(sum(sum(StationaryDist_init,4),3),2)))
+    figure
+    plot(a_grid,cumsum(sum(sum(sum(StationaryDist_init,4),3),2)))
     title('cdf of asset to make sure grid on assets seems okay (init eqm)')
+
+    just10thasset=1:10:n_a;
+    figure
+    temp1=gather(workerORentrepreneur_init(just10thasset,:,1,1)); % heatmap only works with cpu
+    heatmap(z_grid,a_grid(just10thasset),temp1)
+    grid off
+    title('Initial eqm, with tax: Who becomes entrepreneur')
 end
 
 % % Switch to using shooting algorithm
@@ -206,29 +169,12 @@ end
 %     'labormarket','w',1,0.1;... % labormarket GE condition will be positive if w is too small, so add
 %     };
 
-
-%% Analize results
-
-% Second, plots before and post-reform (initial and final stationary general eqms)
-% of who becomes a worker vs entpreneur (in terms of assets and entrepreneurial ability; a and z)
-% Note: You will need to make this figure full screen to be able to read it
-% If we plot all the asset grid the ylabels is a mess because of the lines (between each square), so just plot every 10th asset grid point
-% (better would plot all and then modify the y-axis so that doesn't ytick them all, but I can't be bothered)
-if CreateFigures==1
-    just10thasset=1:10:n_a;
-    figure(3)
-    temp1=gather(workerORentrepreneur_init(just10thasset,:,1,1)); % heatmap only works with cpu
-    heatmap(z_grid,a_grid(just10thasset),temp1)
-    grid off
-    title('Initial eqm, with tax: Who becomes entrepreneur')
-end
-% Can see that for initial eqm with tax, only very high entrepreneurial ability become entrepreneurs, and only those with some assets
-
 %% Save results to mat file
 save BS2013_preTpath.mat
 
 %% Replicate Figure 2 of BS2013
 
+if do_replication==1
 %ii_bench    = 1;
 lambda_vec = [inf,2.0,1.75,1.5,1.25,1.0]';
 NN = length(lambda_vec);
@@ -291,21 +237,21 @@ end
 ldw = 2;
 fts = 14;
 
-figure(1)
+figure
 plot(extfin_Y_vec,Y_vec_norm,'linewidth',ldw)
 xlabel('External Finance to GDP','FontSize',fts)
 ylabel('GDP relative to benchmark','FontSize',fts)
 title('GDP and TFP','FontSize',fts)
 print('fig2a_BS2013','-dpng')
 
-figure(2)
+figure
 plot(extfin_Y_vec,r_vec,'linewidth',ldw)
 xlabel('External Finance to GDP','FontSize',fts)
 ylabel('Interest rate','FontSize',fts)
 title('Interest Rate','FontSize',fts)
 print('fig2b_BS2013','-dpng')
 
-figure(3)
+figure
 subplot(1,2,1)
     plot(extfin_Y_vec,Y_vec_norm,'linewidth',ldw)
     xlabel('External Finance to GDP','FontSize',fts)
@@ -320,3 +266,5 @@ print('fig2_BS2013','-dpng')
 
 
 save data_all 
+
+end %end if do_replication

@@ -2,26 +2,22 @@ clear
 clc
 close all
 addpath(genpath('C:\Users\aledi\Documents\GitHub\VFIToolkit-matlab'))
-% Buera & Shin (2013) - Financial Frictions and the Persistence of History: A Quantitative Exploration
+% Buera & Shin (2013) - Financial Frictions and the Persistence of History: 
+% A Quantitative Exploration
 % The model of Buera & Shin (2013) requires some reworking before
 % computing, see the accompanying pdf.
 % I use z to denote the markov shock (as that is standard nomenclature of
 % VFI Toolkit), which was called e by BS2013.
 
-% BS2013 set
-%Params.beta=0.904;
-% But this results in too much assets such that the eqm interest rate goes
-% negative, so I instead just set
-%Params.beta=0.7; % (I tried 0.85, but still ended up with interest rate of around -0.02, beta=0.8 got interest rate of essentially 0)
-% (BS2013 say beta=0.904 was calibrated to target r=0.045; their table 1)
-% (I would guess that it is either because they set to max for assets too
-% low, or that there is heavy approximation in the value fn at high levels
-% of asset; if the original codes were available you would be able to tell)
+%% Set folders
+ResFolder = 'results'; % Folder to save results
 
 %% Flags
 CreateFigures  = 1; % Flag 0/1 plot figures of initial steady-state
-do_GE          = 0; % 0 = partial equilibrium, 1 = general equilibrium
-do_replication = 0; % Flag 0/1 to replicate Figure 2 of BS 2013
+do_GE          = 1; % 0 = partial equilibrium, 1 = general equilibrium
+do_replication = 0; % Flag 0/1 to replicate Figure 2 of BS 2013. This 
+                    % requires repeatedly solving the s.s. for different
+                    % lambdas
 
 %% Parameters
 
@@ -39,21 +35,21 @@ Params.psi     =0.894; %stochastic process: persistence
 Params.eta     =4.15;  %stochastic process: dispersion
 
 % Collateral constraint
-Params.lambda  =inf;%1.35;
+Params.lambda  =inf; % Calibration of steady-state done for US economy
 
 % Initial values for general eqm parameters: good for lambda=inf
-Params.r = 0.0472;
+Params.r = 0.0476;
 Params.w = 0.171;
 
 %% Grid for assets
-d_grid=[];
-n_d   =0;
+d_grid = []; % No grid for static choice d
+n_d    = 0;  % No grid for static choice d
 % grid on assets
-n_a    = 1001;
-a_min  = 1e-6;
-a_max  = 4000;
+n_a    = 1001; % Num of grid points
+a_min  = 1e-6; % Lower bound
+a_max  = 4000; % Upper bound
 % a_scale>1 puts more points near zero
-a_scale = 2;
+a_scale = 2;   % "Curvature" of asset grid
 a_grid  = a_min+(a_max-a_min)*linspace(0,1,n_a)'.^a_scale;
 
 %% Stochastic process
@@ -90,45 +86,58 @@ a_grid  = a_min+(a_max-a_min)*linspace(0,1,n_a)'.^a_scale;
 
 z_grid   = importdata('support.dat');
 pi_z_vec = importdata('dist.dat');
-n_z      = length(z_grid);
+n_z      = length(z_grid); % Num of grid points for exo state z
 % See my notes on Buera and Shin paper
 pi_z = Params.psi*eye(n_z)+(1-Params.psi)*ones(n_z,1)*pi_z_vec';
 pi_z = pi_z./sum(pi_z,2);
 
 %% Return fn
 DiscountFactorParamNames={'beta'};
-
+% Required inputs:
+% (aprime,a,z) in this order, than any parameter
 ReturnFn=@(aprime,a,z,crra,w,r,lambda,delta,alpha,upsilon) ...
     BueraShin2013_ReturnFn(aprime,a,z,crra,w,r,lambda,delta,alpha,upsilon);
 
 %% Create some FnsToEvaluate
 FnsToEvaluate.A=@(aprime,a,z) a; % assets
-% Capital used (zero if worker)
+% Capital demand by entre (zero if worker)
 FnsToEvaluate.K=@(aprime,a,z,w,r,lambda,delta,alpha,upsilon) BueraShin2013_capitaldemand(aprime,a,z,w,r,lambda,delta,alpha,upsilon); 
-% Labor demand (zero if worker)
+% Labor demand by entre (zero if worker)
 FnsToEvaluate.L=@(aprime,a,z,w,r,lambda,delta,alpha,upsilon) BueraShin2013_labordemand(aprime,a,z,w,r,lambda,delta,alpha,upsilon); 
 % 1 if entrepreneur, 0 if worker
 FnsToEvaluate.entrepreneur=@(aprime,a,z,w,r,lambda,delta,alpha,upsilon) BueraShin2013_entrepreneur(aprime,a,z,w,r,lambda,delta,alpha,upsilon);
 % Entrepreneurial output (zero if worker)
 FnsToEvaluate.Y=@(aprime,a,z,w,r,lambda,delta,alpha,upsilon) BueraShin2013_output(aprime,a,z,w,r,lambda,delta,alpha,upsilon); 
-% Enternal finance
+% Enternal finance (zero if worker)
 FnsToEvaluate.extfin=@(aprime,a,z,w,r,lambda,delta,alpha,upsilon) BueraShin2013_extfin(aprime,a,z,w,r,lambda,delta,alpha,upsilon); 
+% Earnings 
+FnsToEvaluate.earnings=@(aprime,a,z,w,r,lambda,delta,alpha,upsilon) BueraShin2013_earnings(aprime,a,z,w,r,lambda,delta,alpha,upsilon); 
 
 %% Model is set, we can start by just that the basics are running okay
 vfoptions           = struct();
-vfoptions.verbose   = 1;
+vfoptions.verbose   = 0;
 vfoptions.lowmemory = 0;
 simoptions          = struct();
 
 %% Set up general equilibrium
-GEPriceParamNames={'r','w'};
 
 heteroagentoptions.verbose=1;
 heteroagentoptions.toleranceGEprices=10^(-3);
 heteroagentoptions.toleranceGEcondns=10^(-3);
 
-GeneralEqmEqns.capitalmarket=@(K,A) A-K; % assets minus capital demand
-GeneralEqmEqns.labormarket=@(L,entrepreneur) L-(1-entrepreneur); % labor demand=labor supply, suppy is just fraction of workers (who each exogneously supply endowment 1 of labor)
+% heteroagentoptions.fminalgo=5;
+% % Need to explain to heteroagentoptions how to use the GeneralEqmEqns to update the general eqm prices.
+% heteroagentoptions.fminalgo5.howtoupdate={...  % a row is: GEcondn, price, add, factor
+%     'capitalmarket','r',1,0.03;...  % capitalmarket GE condition will be positive if r is too big, so subtract
+%     'labormarket','w',1,0.1;... % labormarket GE condition will be positive if w is too small, so add
+% };
+
+% There are two prices to be determined in GE and two GE conditions
+GEPriceParamNames={'r','w'};
+% GE(1): capital demand minus capital supply
+GeneralEqmEqns.capitalmarket=@(K,A) K-A; 
+% GE(2): labor demand minus labor supply, suppy is just fraction of workers (who each exogneously supply endowment 1 of labor)
+GeneralEqmEqns.labormarket=@(L,entrepreneur) L-(1-entrepreneur); 
 
 %% Compute the model once, either in partial or general equilibrium
 
@@ -138,7 +147,12 @@ else
     disp('Solving initial partial eqm')
 end
 
+tic
 [Outputs,GE_cond,Policy_init,StationaryDist_init,AggVars_init,ValuesOnGrid] = BueraShin_Fn(do_GE,Params,n_d,n_a,n_z,pi_z,d_grid,a_grid,z_grid,ReturnFn,FnsToEvaluate,GeneralEqmEqns,DiscountFactorParamNames,GEPriceParamNames,heteroagentoptions,simoptions,vfoptions);
+time_BueraShin_Fn=toc;
+
+disp(' ')
+fprintf('time_BueraShin_Fn = %f\n',time_BueraShin_Fn)
 
 %% Analyse results from model solution and make plots
 Params.r=Outputs.r;
@@ -161,16 +175,20 @@ if CreateFigures==1
     title('Initial eqm, with tax: Who becomes entrepreneur')
 end
 
-% % Switch to using shooting algorithm
-% heteroagentoptions.fminalgo=5;
-% % Need to explain to heteroagentoptions how to use the GeneralEqmEqns to update the general eqm prices.
-% heteroagentoptions.fminalgo5.howtoupdate={...  % a row is: GEcondn, price, add, factor
-%     'capitalmarket','r',0,0.03;...  % capitalmarket GE condition will be positive if r is too big, so subtract
-%     'labormarket','w',1,0.1;... % labormarket GE condition will be positive if w is too small, so add
-%     };
+%% Replicate Table 1 of BS2013
 
-%% Save results to mat file
-save BS2013_preTpath.mat
+FID = fopen(fullfile(ResFolder,'Table1.tex'),'w');
+fprintf(FID,' \\begin{tabular}{lcc} \\hline \n');
+fprintf(FID,'  & US Data & Model \\\\ \n');
+fprintf(FID,' \\hline \n');
+
+fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Top 10 Employment',Outputs.top10_empl,0.67);
+fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Top 5 Earnings',Outputs.top5_earnings,0.30);
+fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Establisments exit rate',Outputs.exit_E_to_W,0.10);
+fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Real interest rate',Outputs.r,0.045);
+
+fprintf(FID, '\\hline \n \\end{tabular} \n');
+fclose(FID);
 
 %% Replicate Figure 2 of BS2013
 
@@ -249,7 +267,7 @@ plot(extfin_Y_vec,r_vec,'linewidth',ldw)
 xlabel('External Finance to GDP','FontSize',fts)
 ylabel('Interest rate','FontSize',fts)
 title('Interest Rate','FontSize',fts)
-print('fig2b_BS2013','-dpng')
+print(fullfile(ResFolder,'fig2b_BS2013'),'-dpng')
 
 figure
 subplot(1,2,1)
@@ -262,9 +280,8 @@ subplot(1,2,2)
     xlabel('External Finance to GDP','FontSize',fts)
     ylabel('Interest rate','FontSize',fts)
     title('Interest Rate','FontSize',fts)
-print('fig2_BS2013','-dpng')
+print(fullfile(ResFolder,'fig2_BS2013'),'-dpng')
 
-
-save data_all 
+save (fullfile(ResFolder,"data_all.mat")) 
 
 end %end if do_replication

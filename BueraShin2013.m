@@ -12,12 +12,16 @@ addpath(genpath('C:\Users\aledi\Documents\GitHub\VFIToolkit-matlab'))
 %% Set folders
 ResFolder = 'results'; % Folder to save results
 
-%% Flags
+%% Flags and numerical options
 CreateFigures  = 1; % Flag 0/1 plot figures of initial steady-state
 do_GE          = 0; % 0 = partial equilibrium, 1 = general equilibrium
 do_replication = 0; % Flag 0/1 to replicate Figure 2 of BS 2013. This 
                     % requires repeatedly solving the s.s. for different
                     % lambdas
+heteroagentoptions.fminalgo=7;
+heteroagentoptions.verbose=1;
+heteroagentoptions.toleranceGEprices=10^(-3);
+heteroagentoptions.toleranceGEcondns=10^(-3);
 
 %% Parameters
 
@@ -120,11 +124,6 @@ vfoptions.lowmemory = 0;
 simoptions          = struct();
 
 %% Set up general equilibrium
-
-heteroagentoptions.verbose=1;
-heteroagentoptions.toleranceGEprices=10^(-3);
-heteroagentoptions.toleranceGEcondns=10^(-3);
-
 % heteroagentoptions.fminalgo=5;
 % % Need to explain to heteroagentoptions how to use the GeneralEqmEqns to update the general eqm prices.
 % heteroagentoptions.fminalgo5.howtoupdate={...  % a row is: GEcondn, price, add, factor

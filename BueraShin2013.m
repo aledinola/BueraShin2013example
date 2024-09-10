@@ -14,7 +14,7 @@ ResFolder = 'results'; % Folder to save results
 
 %% Flags
 CreateFigures  = 1; % Flag 0/1 plot figures of initial steady-state
-do_GE          = 1; % 0 = partial equilibrium, 1 = general equilibrium
+do_GE          = 0; % 0 = partial equilibrium, 1 = general equilibrium
 do_replication = 0; % Flag 0/1 to replicate Figure 2 of BS 2013. This 
                     % requires repeatedly solving the s.s. for different
                     % lambdas
@@ -182,10 +182,10 @@ fprintf(FID,' \\begin{tabular}{lcc} \\hline \n');
 fprintf(FID,'  & US Data & Model \\\\ \n');
 fprintf(FID,' \\hline \n');
 
-fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Top 10 Employment',Outputs.top10_empl,0.67);
-fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Top 5 Earnings',Outputs.top5_earnings,0.30);
-fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Establisments exit rate',Outputs.exit_E_to_W,0.10);
-fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Real interest rate',Outputs.r,0.045);
+fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Top 10 Employment',0.67,Outputs.top10_empl);
+fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Top 5 Earnings',0.30,Outputs.top5_earnings);
+fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Establisments exit rate',0.10,Outputs.exit_E_to_W);
+fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Real interest rate',0.045,Outputs.r);
 
 fprintf(FID, '\\hline \n \\end{tabular} \n');
 fclose(FID);

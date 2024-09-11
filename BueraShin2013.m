@@ -14,11 +14,12 @@ ResFolder = 'results'; % Folder to save results
 
 %% Flags and numerical options
 CreateFigures  = 1; % Flag 0/1 plot figures of initial steady-state
-do_GE          = 0; % 0 = partial equilibrium, 1 = general equilibrium
+do_GE          = 1; % 0 = partial equilibrium, 1 = general equilibrium
 do_replication = 0; % Flag 0/1 to replicate Figure 2 of BS 2013. This 
                     % requires repeatedly solving the s.s. for different
                     % lambdas
 heteroagentoptions.fminalgo=7;
+heteroagentoptions.maxiter=50;
 heteroagentoptions.verbose=1;
 heteroagentoptions.toleranceGEprices=10^(-3);
 heteroagentoptions.toleranceGEcondns=10^(-3);
@@ -43,7 +44,7 @@ Params.lambda  =inf; % Calibration of steady-state done for US economy
 
 % Initial values for general eqm parameters: good for lambda=inf
 Params.r = 0.0476;
-Params.w = 0.171;
+Params.w = 0.172;
 
 %% Grid for assets
 d_grid = []; % No grid for static choice d
@@ -176,18 +177,7 @@ end
 
 %% Replicate Table 1 of BS2013
 
-FID = fopen(fullfile(ResFolder,'Table1.tex'),'w');
-fprintf(FID,' \\begin{tabular}{lcc} \\hline \n');
-fprintf(FID,'  & US Data & Model \\\\ \n');
-fprintf(FID,' \\hline \n');
-
-fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Top 10 Employment',0.67,Outputs.top10_empl);
-fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Top 5 Earnings',0.30,Outputs.top5_earnings);
-fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Establisments exit rate',0.10,Outputs.exit_E_to_W);
-fprintf(FID,'%s  & %8.3f & %8.3f \\\\ \n','Real interest rate',0.045,Outputs.r);
-
-fprintf(FID, '\\hline \n \\end{tabular} \n');
-fclose(FID);
+make_table(ResFolder,GE_cond,Outputs);
 
 %% Replicate Figure 2 of BS2013
 

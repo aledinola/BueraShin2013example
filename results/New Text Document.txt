@@ -1,0 +1,1 @@
+time_BueraShin_Fn = 112.623566

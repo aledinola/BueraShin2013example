@@ -18,7 +18,7 @@ do_GE          = 1; % 0 = partial equilibrium, 1 = general equilibrium
 do_replication = 0; % Flag 0/1 to replicate Figure 2 of BS 2013. This 
                     % requires repeatedly solving the s.s. for different
                     % lambdas
-heteroagentoptions.fminalgo=1;
+heteroagentoptions.fminalgo=7;
 heteroagentoptions.maxiter=50;
 heteroagentoptions.verbose=1;
 heteroagentoptions.toleranceGEprices=10^(-3);
